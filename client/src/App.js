@@ -1,16 +1,17 @@
 import React, { Component } from 'react'
 import Form from 'react-jsonschema-form'
-import axios from 'axios'
 import debounce from 'lodash/debounce'
+import getDataFromServer from './utils/getEventDataFromServer'
+import getXmlFromServer from './utils/getXmlFromServer'
 import './App.css'
 
 class App extends Component {
   constructor(props) {
     super(props)
     this.state = { data: {} }
-    this.formSchema = require('./utils/formSchema.json')
-    this.uiSchema = require('./utils/uiSchema.json')
-    this.transformErrors = require('./utils/formSchemaTransforms')
+    this.formSchema = require('./utils/formSchema/formSchema.json')
+    this.uiSchema = require('./utils/formSchema/uiSchema.json')
+    this.transformErrors = require('./utils/formSchema/formSchemaTransforms')
     this.log = (type) => console.log.bind(console, type)
   }
 
@@ -46,38 +47,16 @@ class App extends Component {
     return false
   }
 
-  getEventDataFromServer = async (originEventNumber) => {
-    const response = await fetch(`/api/${originEventNumber}`)
-    if (response.status !== 200) {
-      throw Error(response.statusText)
-    }
-    return response.json()
-  }
+  downloadXml = async () => {
+    const request = await getXmlFromServer(this.state.data)
+    const { downloadUrl, fileName, message } = request
 
-  getXmlFromServer = async () => {
-    try {
-      const {
-        data: { status, url, fileName },
-      } = await axios.post('/api/getXML', { data: this.state.data })
-
-      if (status) {
-        const response = await axios({
-          url,
-          method: 'GET',
-          responseType: 'blob',
-        })
-
-        const downloadUrl = window.URL.createObjectURL(
-          new Blob([response.data])
-        )
-        const link = document.createElement('a')
-        link.href = downloadUrl
-        link.setAttribute('download', fileName)
-        link.click()
-        window.URL.revokeObjectURL(downloadUrl)
-      }
-    } catch (error) {
-      console.error(`Something went wrong: ${error}`)
+    if (!message) {
+      const link = document.createElement('a')
+      link.href = downloadUrl
+      link.setAttribute('download', fileName)
+      link.click()
+      window.URL.revokeObjectURL(downloadUrl)
     }
   }
 
@@ -85,9 +64,9 @@ class App extends Component {
     const workingLocallyOnly = this.isHandlingLocalDataOnly(formData)
 
     if (!workingLocallyOnly) {
-      this.getEventDataFromServer(formData.originEventNumber)
-        .then((res) => this.setState({ data: res }))
-        .catch((err) => console.error(err))
+      getDataFromServer(formData.originEventNumber)
+        .then((response) => this.setState({ data: response }))
+        .catch((error) => console.error(error))
     }
   }, 500)
 
@@ -105,7 +84,7 @@ class App extends Component {
               uiSchema={this.uiSchema}
               formData={this.state.data}
               onChange={this.onChange}
-              onSubmit={this.getXmlFromServer}
+              onSubmit={this.downloadXml}
               onError={this.log('Erro na validação do do formulário.')}
               transformErrors={this.transformErrors}
             />
